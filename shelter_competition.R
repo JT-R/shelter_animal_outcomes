@@ -37,8 +37,8 @@ FitUnknownLevelsToModel(dataset = testing, model = model)
 predictions <- data.table(predicted_class = predict(model, newdata = testing, type = "probs"))
 setnames(predictions, colnames(predictions), gsub(pattern = "predicted_class.", replacement = "", x = colnames(predictions), fixed=TRUE))
 setcolorder(predictions, neworder = order(colnames(predictions)))
-predictions <- data.table(ID = testing$ID, predictions)
-write.csv(x = predictions, file = "predictions.csv", row.names=FALSE, quote=FALSE)
+final_multinomial_predictions <- data.table(ID = testing$ID, predictions)
+write.csv(x = final_multinomial_predictions, file = "mult_predictions.csv", row.names=FALSE, quote=FALSE)
 
 
 model_formula <- as.formula("~Sex + Has_Name + DaysUponOutcome +
@@ -68,34 +68,38 @@ xgb_testing <- xgb.DMatrix(data.matrix(testing[,predictors, with=FALSE]))
 model <- xgb.train(data = xgb_labeled,
                    label = xgb_outcome,
                    num_class = 5,
-                   nrounds = 15,
-                   eta = 0.2,
+                   nrounds = 160,
+                   eta = 0.05,
                    nthreads = 4,
-                   max.depth = 7,
+                   #max.depth = 6,
                    watchlist = list(train = xgb_labeled),
                    objective = "multi:softprob",
-                   eval_metric = "mlogloss")
+                   eval_metric = "mlogloss",
+                   # subsample=0.75, 
+                   # colsample_bytree=0.85
+                   )
 
-xgb_model_test = xgboost(data=xgb_labeled,
-                         nrounds=5, 
-                         verbose=1, 
-                         eta=0.2, 
-                         max_depth=6, 
-                         subsample=0.75, 
-                         colsample_bytree=0.85,
-                         objective="multi:softprob", 
-                         eval_metric="mlogloss",
-                         num_class=5)
+# xgb_model_test = xgboost(data=xgb_labeled,
+#                          nrounds=5, 
+#                          verbose=1, 
+#                          eta=0.2, 
+#                          max_depth=6, 
+#                          subsample=0.75, 
+#                          colsample_bytree=0.85,
+#                          objective="multi:softprob", 
+#                          eval_metric="mlogloss",
+#                          num_class=5)
 
 predictions <- predict(model, xgb_testing)
 predictions <- data.table(t(matrix(predictions, nrow = 5, ncol = nrow(testing))))
 #setnames(predictions, colnames(predictions), c("Euthanasia", "Adoption", "Died", "Return_to_owner", "Transfer"))
-setnames(predictions, colnames(predictions), c('Adoption', 'Died', 'Euthanasia', 'Return_to_owner', 'Transfer'))
+#setnames(predictions, colnames(predictions), c('Adoption', 'Died', 'Euthanasia', 'Return_to_owner', 'Transfer'))
+setnames(predictions, colnames(predictions), c('Euthanasia', 'Adoption', 'Died', 'Return_to_owner', 'Transfer'))
 setcolorder(predictions, neworder = order(colnames(predictions)))
-final_pred <- predictions
-final_pred <- data.table(ID = testing$ID, final_pred)
+final_xgb_pred <- predictions
+final_xgb_pred <- data.table(ID = testing$ID, final_pred)
 
-write.csv(x = final_pred, file = "predictions.csv", row.names=FALSE, quote=FALSE)
+write.csv(x = final_xgb_pred, file = "xgb_predictions.csv", row.names=FALSE, quote=FALSE)
 
 
 
@@ -107,29 +111,42 @@ validation_datasets <- CreateValidationDatasets(labeled_set, validation)
 training <- validation_datasets[['training']]
 validation <- validation_datasets[['validation']]
 
-xgb_training <- xgb.DMatrix(model.matrix(model_formula, data = training),
-                         label=as.numeric(as.factor(training$OutcomeType))-1, missing=NA)
+xgb_sample_outcome <- as.numeric(as.factor(training$OutcomeType))-1
+xgb_validation_outcome <- as.numeric(as.factor(validation$OutcomeType))-1
 
-xgb_validation <- xgb.DMatrix(model.matrix(model_formula, data = validation),
-                            label=as.numeric(as.factor(validation$OutcomeType))-1, missing=NA)
+xgb_training <- xgb.DMatrix(data.matrix(training[,predictors, with=FALSE]), label = xgb_sample_outcome)               # the training set
+xgb_validation <- xgb.DMatrix(data.matrix(validation[,predictors, with=FALSE]), label = xgb_validation_outcome)
+# 
+# xgb_training <- xgb.DMatrix(model.matrix(model_formula, data = training),
+#                          label=as.numeric(as.factor(training$OutcomeType))-1, missing=NA)
+# 
+# xgb_validation <- xgb.DMatrix(model.matrix(model_formula, data = validation),
+#                             label=as.numeric(as.factor(validation$OutcomeType))-1, missing=NA)
 
 xgb_model <- xgb.train(data = xgb_training,
-                   num_class = 5,
-                   nrounds = 100,
-                   eta = 0.05,
-                   nthreads = 4,
-                   max.depth = 7,
-                   watchlist = list(train = xgb_training, eval = xgb_validation),
-                   objective = "multi:softprob",
-                   eval_metric = "mlogloss")
+                       label = xgb_sample_outcome,
+                       num_class = 5,
+                       nrounds = 160,
+                       eta = 0.05,
+                       nthreads = 4,
+                       #max.depth = 6,
+                       watchlist = list(train = xgb_training, eval = xgb_validation),
+                       objective = "multi:softprob",
+                       eval_metric = "mlogloss",
+                       # subsample=0.75, 
+                       # colsample_bytree=0.85
+                       )
 
 predictions <- predict(xgb_model, xgb_validation)
 predictions <- data.table(t(matrix(predictions, nrow = 5, ncol = nrow(validation))))
-setnames(predictions, colnames(predictions), c("Euthanasia", "Adoption", "Died", "Return_to_owner", "Transfer"))
+# setnames(predictions, colnames(predictions), c("Euthanasia", "Adoption", "Died", "Return_to_owner", "Transfer"))
+setnames(predictions, colnames(predictions), c('Euthanasia', 'Adoption', 'Died', 'Return_to_owner', 'Transfer'))
+MultiLogLoss(act = as.matrix(actual_classes), pred = as.matrix(xgb_pred))
 setcolorder(predictions, neworder = order(colnames(predictions)))
 xgb_pred <- predictions
+actual_classes <- data.table(model.matrix(~ OutcomeType -1, data = validation))
 
-MultiLogLoss(act = as.matrix(actual_classes), pred = as.matrix(xgb_pred))
+
 
 xgb_classes <- apply(xgb_pred, 2, function(x) ifelse(x>median(x), 1, 0))
 
@@ -150,7 +167,7 @@ xgb_accuracy
 # training <- validation_datasets[['training']]
 # validation <- validation_datasets[['validation']]
 
-mult_model <- multinom(OutcomeType ~ Sex + Has_Name + DaysUponOutcome + AnimalType + Fixed_Breed, data = training)
+# mult_model <- multinom(OutcomeType ~ Sex + Has_Name + DaysUponOutcome + AnimalType + Fixed_Breed, data = training)
 
 mult_model <- multinom(OutcomeType ~ Has_Name + DaysUponOutcome + Fixed_Breed + TimeOfTheDay +
                     Season + Year + IsMix + IsDomestic + Sex*IsSterilized + HairLength +
@@ -209,3 +226,9 @@ hist(xgb_pred$Transfer)
 hist(mult_pred$Transfer)
 hist(final_pred$Transfer)
 dev.off()
+
+plot(xgb_pred$Adoption, mult_pred$Adoption)
+plot(xgb_pred$Died, mult_pred$Died)
+plot(xgb_pred$Euthanasia, mult_pred$Euthanasia)
+plot(xgb_pred$Return_to_owner, mult_pred$Return_to_owner)
+plot(xgb_pred$Transfer, mult_pred$Transfer)
