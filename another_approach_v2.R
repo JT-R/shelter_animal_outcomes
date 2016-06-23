@@ -60,23 +60,30 @@ labeled_set <- processed_datasets[['labeled_data']]
 #labeled_set[, SexuponOutcome:= NULL]
 testing <- processed_datasets[['testing']]
 
+set.seed(20160324L)
 validation_datasets <- CreateValidationDatasets(labeled_set, n)
 training <- validation_datasets[['training']]
 validation <- validation_datasets[['validation']]
 
-training <- clean(data.frame(labeled_set))
+training <- clean(data.frame(labeled_set), n_words = 8)
 #training <- clean(training)
-validation <- clean(data.frame(validation))
-testing <- clean(data.frame(testing))
+validation <- clean(data.frame(validation), n_words = 8)
+testing <- clean(data.frame(testing), n_words = 8)
 actual_classes <- data.table(model.matrix(~ OutcomeType -1, data = validation))
 
 #training[, Hour:= NULL]
 
 for(i in names(training)) if(is.logical(training[[i]])) {training[[i]] <- as.numeric(training[[i]]); validation[[i]] <- as.numeric(validation[[i]])}
 
-predictors <- colnames(training)
-predictors <- setdiff(c(predictors, "OutcomeType"),
-                      c("DateTime","Euthanasia", "Adoption", "Died", "Return_to_owner", "Transfer"))
+# predictors <- colnames(training)
+# predictors <- setdiff(c(predictors, "OutcomeType"),
+#                       c("DateTime","Euthanasia", "Adoption", "Died", "Return_to_owner", "Transfer"))
+
+only_features <- c("DateTime", "OutcomeType", "AnimalType", "SexuponOutcome", "AgeuponOutcome",
+                   "IsDomestic", "IsSterilized", "Hour", "Weekday", "NameLen", "NameWeirdness",
+                   "breed.Pit.Bull.Mix")
+only_features <- c(only_features, colnames(training)[grepl("w.", colnames(training))])
+training <- training[ , (names(training) %in% only_features)]
 
 set.seed(20160324L)
 gbm_model <- gbm(
@@ -95,7 +102,6 @@ gbm_model <- gbm(
 summary(gbm_model)
 nonimportant_features <- rownames(summary(gbm_model))[which(summary(gbm_model)[,2] < 0.070)]
 training <- training[ , !(names(training) %in% nonimportant_features)]
-training <- training[ , (names(training) %in% only_features)]
 
 
 testPreds2 <- predict(gbm_model,validation,type="response")
@@ -109,4 +115,4 @@ dim(submission_preds) <- c(nrow(submission_preds),5)
 colnames(submission_preds) <- levels(training$OutcomeType)
 submission_preds <- cbind(ID = testing$ID, submission_preds)
 
-write.csv(x = submission_preds, file = "simpler_predictions_v2.csv", row.names=FALSE, quote=FALSE)
+write.csv(x = submission_preds, file = "simpler_predictions_15.csv", row.names=FALSE, quote=FALSE)

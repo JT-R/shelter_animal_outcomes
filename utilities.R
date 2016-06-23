@@ -164,6 +164,27 @@ GroupRareBreeds <- function(dataset){
   dataset[, Fixed_Breed:= factor(Fixed_Breed)]
 }
 
+CreateBreedOutputSubtypesProbabilityFeatures <- function(dataset){
+  n <- nrow(dataset)
+  dataset[OutcomeSubtype=="", OutcomeSubtype:= "None"]
+  dataset[OutcomeSubtype == "In Foster", OutcomeSubtype:= "Foster"]
+  subtypes_count <- dataset[,.N,OutcomeSubtype][order(-N)]
+  subtypes_count[, cumulated_share:= cumsum(N)/n]
+  subtypes_count <- subtypes_count[N>30]
+  
+  breeds_output_subtypes <- dataset[,.N, list(Fixed_Breed, OutcomeSubtype)][order(Fixed_Breed)]
+  subtypes_probs_per_breed <- breeds_output_subtypes[,list(OutcomeSubtype, N, prob = N/sum(N)),
+                                                     by = Fixed_Breed][order(Fixed_Breed, -N)]
+  subtypes_probs_per_breed[, OutcomeSubtype:= paste0("stype_", OutcomeSubtype)]
+  subtypes_probs_per_breed[, OutcomeSubtype:= gsub(pattern = " ", "_", OutcomeSubtype)]
+  subtypes_features_table <- dcast.data.table(data = subtypes_probs_per_breed,
+                                              formula = Fixed_Breed ~ OutcomeSubtype,
+                                              value.var = "prob",
+                                              fill = 0)
+  
+  return(subtypes_features_table)
+}
+
 PreprocessDatasets <- function(labeled_data, testing){
   CreateHasNameFeature(labeled_data)
   labeled_data <- CreateDaysUponOutcomeFeature(labeled_data)
@@ -182,6 +203,8 @@ PreprocessDatasets <- function(labeled_data, testing){
   CreateAgeCategoriesFeature(labeled_data)
   CreateIsWeekendFeature(labeled_data)
   CreateYearPartFeature(labeled_data)
+  subtypes_per_breed <- CreateBreedOutputSubtypesProbabilityFeatures(labeled_data)
+  labeled_data <- merge(labeled_data, subtypes_per_breed, by = "Fixed_Breed")
   
   labeled_data <- AddBinarizedOutcomeColumns(labeled_data)
   
@@ -202,18 +225,19 @@ PreprocessDatasets <- function(labeled_data, testing){
   CreateAgeCategoriesFeature(testing)
   CreateIsWeekendFeature(testing)
   CreateYearPartFeature(testing)
+  testing <- merge(testing, subtypes_per_breed, by = "Fixed_Breed", all.x = TRUE)
   
   return(list(labeled_data = labeled_data,
               testing = testing))
 }
 
-CreateValidationDatasets <- function(training, validation, seed = 123){
-  n <- nrow(labeled_data)
+CreateValidationDatasets <- function(labeled_set, n, seed = 123){
+  #n <- nrow(labeled_data)
   training_indices <- sample(n, floor(n*2/3))
   testing_indices <- setdiff(1:n, training_indices)
   
-  training <- labeled_data[training_indices]
-  validation <- labeled_data[testing_indices]
+  training <- labeled_set[training_indices]
+  validation <- labeled_set[testing_indices]
   
   return(list(training = training,
               validation = validation))
