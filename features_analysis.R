@@ -11,7 +11,7 @@ grouped <- labeled_data[,list(Adoption = mean(Adoption),
                              Died = mean(Died),
                              Return_to_owner = mean(Return_to_owner),
                              Transfer = mean(Transfer),
-                             N = .N), by = list(Hour)][order(Hour)][N>400]
+                             N = .N), by = list(OutcomeSubtype)][order(OutcomeSubtype)][N>400]
 
 grouped
 feature <- grouped$Hour

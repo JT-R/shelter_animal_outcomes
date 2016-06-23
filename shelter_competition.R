@@ -8,14 +8,6 @@ processed_datasets <- PreprocessDatasets(labeled_data, testing)
 labeled_data <- processed_datasets[['labeled_data']]
 testing <- processed_datasets[['testing']]
 
-# 
-# model <- gbm(OutcomeType ~ Sex + Has_Name + DaysUponOutcome + AnimalType + Color + Fixed_Breed,
-#              data = labeled_data,
-#              n.trees = 150)
-# summary(model)
-# predictions <- data.table(predicted_class = predict(model, newdata = labeled_data,
-#      n.trees = 150, type = "response"))
-
 ######
 # TO PONIZEJ BYLO NAJLEPSZE W DRUGIM SUBMISSION:
 ######
@@ -49,21 +41,16 @@ model_formula <- as.formula("~ Has_Name + DaysUponOutcome + Fixed_Breed + TimeOf
                     Season + Year + IsMix + IsDomestic + Sex + IsSterilized + HairLength +
                     NumberOfColors + FirstColor + AnimalType + AgeCategory + IsWeekend + YearPart -1")
 
-predictors <- c("Has_Name","DaysUponOutcome","Fixed_Breed","TimeOfTheDay","Season","Year","IsMix","IsDomestic","Sex",
+# submission 11:
+# predictors <- c("Has_Name","DaysUponOutcome","Fixed_Breed","TimeOfTheDay","Season","Year","IsMix","IsDomestic","Sex",
+#                 "IsSterilized","HairLength","NumberOfColors","FirstColor","AnimalType","AgeCategory","IsWeekend","YearPart")
+predictors <- c("Has_Name","DaysUponOutcome","Breed","TimeOfTheDay","Season","Day","Year","IsMix","IsDomestic","Sex",
                 "IsSterilized","HairLength","NumberOfColors","FirstColor","AnimalType","AgeCategory","IsWeekend","YearPart")
-
 
 xgb_outcome <- as.numeric(as.factor(labeled_data$OutcomeType))-1
 
 xgb_labeled <- xgb.DMatrix(data.matrix(labeled_data[,predictors, with=FALSE]), label = xgb_outcome)               # the training set
 xgb_testing <- xgb.DMatrix(data.matrix(testing[,predictors, with=FALSE]))
-
-# xgb_labeled <- xgb.DMatrix(model.matrix(model_formula, data = labeled_data),
-#                            label = xgb_outcome,
-#                            missing=NA)
-# 
-# xgb_testing <- xgb.DMatrix(model.matrix(model_formula, data = testing),
-#                            missing=NA)
 
 model <- xgb.train(data = xgb_labeled,
                    label = xgb_outcome,
@@ -74,21 +61,8 @@ model <- xgb.train(data = xgb_labeled,
                    #max.depth = 6,
                    watchlist = list(train = xgb_labeled),
                    objective = "multi:softprob",
-                   eval_metric = "mlogloss",
-                   # subsample=0.75, 
-                   # colsample_bytree=0.85
+                   eval_metric = "mlogloss"
                    )
-
-# xgb_model_test = xgboost(data=xgb_labeled,
-#                          nrounds=5, 
-#                          verbose=1, 
-#                          eta=0.2, 
-#                          max_depth=6, 
-#                          subsample=0.75, 
-#                          colsample_bytree=0.85,
-#                          objective="multi:softprob", 
-#                          eval_metric="mlogloss",
-#                          num_class=5)
 
 predictions <- predict(model, xgb_testing)
 predictions <- data.table(t(matrix(predictions, nrow = 5, ncol = nrow(testing))))
@@ -97,56 +71,69 @@ predictions <- data.table(t(matrix(predictions, nrow = 5, ncol = nrow(testing)))
 setnames(predictions, colnames(predictions), c('Euthanasia', 'Adoption', 'Died', 'Return_to_owner', 'Transfer'))
 setcolorder(predictions, neworder = order(colnames(predictions)))
 final_xgb_pred <- predictions
-final_xgb_pred <- data.table(ID = testing$ID, final_pred)
+final_xgb_pred <- data.table(ID = testing$ID, final_xgb_pred)
 
 write.csv(x = final_xgb_pred, file = "xgb_predictions.csv", row.names=FALSE, quote=FALSE)
-
-
-
-
-
+hist(final_xgb_pred$Adoption)
+hist(final_xgb_pred$Died)
+hist(final_xgb_pred$Euthanasia)
+hist(final_xgb_pred$Return_to_owner)
+hist(final_xgb_pred$Transfer)
 
 
 validation_datasets <- CreateValidationDatasets(labeled_set, validation)
 training <- validation_datasets[['training']]
 validation <- validation_datasets[['validation']]
+actual_classes <- data.table(model.matrix(~ OutcomeType -1, data = validation))
 
 xgb_sample_outcome <- as.numeric(as.factor(training$OutcomeType))-1
 xgb_validation_outcome <- as.numeric(as.factor(validation$OutcomeType))-1
 
+# predictors <- c("Has_Name","DaysUponOutcome","Fixed_Breed","TimeOfTheDay","Season","Year","IsMix","IsDomestic","Sex",
+#                 "IsSterilized","HairLength","NumberOfColors","FirstColor","AnimalType","AgeCategory","IsWeekend","YearPart")
+
+# predictors <- c("Has_Name","DaysUponOutcome","Fixed_Breed","TimeOfTheDay","Month","Day","Year","IsMix","IsDomestic","Sex",
+#                 "IsSterilized","HairLength","NumberOfColors","FirstColor","SecondColor","AnimalType","AgeCategory","IsWeekend","YearPart")
+
+predictors <- c("Has_Name","DaysUponOutcome","Fixed_Breed","TimeOfTheDay","Month","Day","Year","IsMix","IsDomestic","Sex",
+                "IsSterilized","HairLength","NumberOfColors","FirstColor","SecondColor","AnimalType","AgeCategory","IsWeekend","YearPart")
+predictors <- c(predictors, colnames(training)[grepl("stype_", colnames(training))])
+
+predictors <- c("Has_Name","DaysUponOutcome","Fixed_Breed","TimeOfTheDay","Year","Month","Day","IsMix","IsDomestic","Sex",
+                "IsSterilized","FirstColor","SecondColor","AnimalType","AgeCategory")
+predictors <- c(predictors, colnames(training)[grepl("stype_", colnames(training))])
+
+predictors <- c("Has_Name","DaysUponOutcome","Breed","Month","Day","Year","IsMix","IsDomestic","Sex",
+                "IsSterilized","HairLength","FirstColor","AnimalType")
+
 xgb_training <- xgb.DMatrix(data.matrix(training[,predictors, with=FALSE]), label = xgb_sample_outcome)               # the training set
 xgb_validation <- xgb.DMatrix(data.matrix(validation[,predictors, with=FALSE]), label = xgb_validation_outcome)
-# 
-# xgb_training <- xgb.DMatrix(model.matrix(model_formula, data = training),
-#                          label=as.numeric(as.factor(training$OutcomeType))-1, missing=NA)
-# 
-# xgb_validation <- xgb.DMatrix(model.matrix(model_formula, data = validation),
-#                             label=as.numeric(as.factor(validation$OutcomeType))-1, missing=NA)
 
 xgb_model <- xgb.train(data = xgb_training,
                        label = xgb_sample_outcome,
                        num_class = 5,
-                       nrounds = 160,
-                       eta = 0.05,
+                       nrounds = 80,
+                       eta = 0.1,
+                       min_child_weight = 0.1,
                        nthreads = 4,
-                       #max.depth = 6,
+                       max.depth = 7,
                        watchlist = list(train = xgb_training, eval = xgb_validation),
                        objective = "multi:softprob",
-                       eval_metric = "mlogloss",
-                       # subsample=0.75, 
-                       # colsample_bytree=0.85
+                       eval_metric = "mlogloss"
                        )
 
 predictions <- predict(xgb_model, xgb_validation)
 predictions <- data.table(t(matrix(predictions, nrow = 5, ncol = nrow(validation))))
 # setnames(predictions, colnames(predictions), c("Euthanasia", "Adoption", "Died", "Return_to_owner", "Transfer"))
 setnames(predictions, colnames(predictions), c('Euthanasia', 'Adoption', 'Died', 'Return_to_owner', 'Transfer'))
-MultiLogLoss(act = as.matrix(actual_classes), pred = as.matrix(xgb_pred))
-setcolorder(predictions, neworder = order(colnames(predictions)))
+#setcolorder(predictions, neworder = order(colnames(predictions)))
+MultiLogLoss(act = as.matrix(actual_classes), pred = as.matrix(predictions))
 xgb_pred <- predictions
-actual_classes <- data.table(model.matrix(~ OutcomeType -1, data = validation))
+#actual_classes <- data.table(model.matrix(~ OutcomeType -1, data = validation))
 
-
+xgb_imp <- xgb.importance(feature_names = predictors,
+                          model = xgb_model)
+xgb.plot.importance(xgb_imp)
 
 xgb_classes <- apply(xgb_pred, 2, function(x) ifelse(x>median(x), 1, 0))
 
@@ -181,7 +168,7 @@ setcolorder(predictions, neworder = order(colnames(predictions)))
 mult_pred <- predictions
 #predictions <- data.table(ID = validation$AnimalID, predictions)
 
-actual_classes <- data.table(model.matrix(~ OutcomeType -1, data = validation))
+
 setnames(actual_classes, colnames(actual_classes), gsub(pattern = "OutcomeType", replacement = "", x = colnames(actual_classes), fixed=TRUE))
 setcolorder(actual_classes, neworder = order(colnames(actual_classes)))
 
